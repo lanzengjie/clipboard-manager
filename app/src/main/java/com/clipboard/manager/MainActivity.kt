@@ -23,6 +23,7 @@ import com.clipboard.manager.database.ClipboardEntry
 import com.clipboard.manager.databinding.ActivityMainBinding
 import com.clipboard.manager.service.ClipboardAccessibilityService
 import com.clipboard.manager.ui.ClipboardViewModel
+import com.clipboard.manager.util.DebugLog
 
 class MainActivity : AppCompatActivity() {
 
@@ -50,10 +51,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 初始化调试日志
+        DebugLog.init(this)
+        DebugLog.log("=== MainActivity onCreate ===")
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         viewModel = ViewModelProvider(this)[ClipboardViewModel::class.java]
+
+        DebugLog.log("ViewModel initialized")
+        DebugLog.log("ClipboardAccessibilityService.isEnabled: ${ClipboardAccessibilityService.isEnabled}")
 
         // Restore monitoring state
         restoreMonitoringState()
@@ -188,6 +197,105 @@ class MainActivity : AppCompatActivity() {
 
         binding.buttonClearHistory.setOnClickListener {
             showClearHistoryDialog()
+        }
+
+        // 调试按钮
+        binding.buttonRefreshDebug.setOnClickListener {
+            refreshDebugInfo()
+        }
+
+        binding.buttonViewLog.setOnClickListener {
+            showLogDialog()
+        }
+
+        binding.buttonGetClipboard.setOnClickListener {
+            getCurrentClipboard()
+        }
+    }
+
+    private fun refreshDebugInfo() {
+        DebugLog.log("=== refreshDebugInfo called ===")
+
+        val accessibilityEnabled = ClipboardAccessibilityService.isEnabled
+        val serviceInstance = ClipboardAccessibilityService.getInstance()
+
+        val info = buildString {
+            appendLine("=== 调试状态 ===")
+            appendLine("辅助功能服务: ${if (accessibilityEnabled) "已启用 ✅" else "未启用 ❌"}")
+            appendLine("服务实例: ${if (serviceInstance != null) "存在 ✅" else "不存在 ❌"}")
+            appendLine("监听状态: ${if (isMonitoring) "开启中" else "已停止"}")
+            appendLine("Android版本: ${android.os.Build.VERSION.RELEASE}")
+            appendLine("设备: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            appendLine()
+            appendLine("=== 检查步骤 ===")
+            appendLine("1. 请确认已在系统设置中开启辅助功能权限")
+            appendLine("2. 点击'开始监听'按钮")
+            appendLine("3. 在其他应用复制文本测试")
+        }
+
+        binding.debugInfoText.text = info
+    }
+
+    private fun showLogDialog() {
+        val logContent = DebugLog.getLogContent()
+
+        // 只显示最后 2000 字符
+        val displayContent = if (logContent.length > 2000) {
+            "...(截取最后2000字符)\n" + logContent.takeLast(2000)
+        } else {
+            logContent
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("调试日志")
+            .setMessage(displayContent)
+            .setPositiveButton("刷新", { _, _ -> refreshDebugInfo() })
+            .setNegativeButton("关闭", null)
+            .setNeutralButton("清空日志", { _, _ ->
+                DebugLog.clearLog()
+                Toast.makeText(this, "日志已清空", Toast.LENGTH_SHORT).show()
+            })
+            .show()
+    }
+
+    private fun getCurrentClipboard() {
+        DebugLog.log("=== getCurrentClipboard called ===")
+
+        try {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = clipboard.primaryClip
+
+            val info = buildString {
+                appendLine("=== 当前剪贴板 ===")
+                appendLine("ClipboardManager: $clipboard")
+                appendLine("PrimaryClip: ${clip != null}")
+
+                if (clip != null) {
+                    appendLine("ItemCount: ${clip.itemCount}")
+
+                    if (clip.itemCount > 0) {
+                        val text = clip.getItemAt(0).text?.toString()
+                        appendLine("文本内容: '${text?.take(100)}'")
+                        appendLine("文本长度: ${text?.length}")
+
+                        if (text != null && text.length > 100) {
+                            appendLine()
+                            appendLine("=== 完整内容 (前500字) ===")
+                            appendLine(text.take(500))
+                        }
+                    }
+                }
+            }
+
+            binding.debugInfoText.text = info
+            DebugLog.log("Current clipboard: ${info.take(200)}")
+
+            Toast.makeText(this, "已获取当前剪贴板内容", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            val errorMsg = "获取剪贴板失败: ${e.message}"
+            binding.debugInfoText.text = errorMsg
+            DebugLog.logError("getCurrentClipboard failed", e)
         }
     }
 

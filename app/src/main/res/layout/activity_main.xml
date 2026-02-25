@@ -71,6 +71,78 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <!-- Debug Info Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/debugCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="1dp"
+        app:strokeWidth="0dp"
+        app:cardBackgroundColor="#FFF3E0"
+        app:layout_constraintTop_toBottomOf="@id/headerCard">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="调试信息"
+                android:textSize="14sp"
+                android:textColor="#E65100"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/debugInfoText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="点击下方按钮获取状态"
+                android:textSize="12sp"
+                android:textColor="#5D4037"
+                android:fontFamily="monospace" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonRefreshDebug"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="刷新状态"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonViewLog"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="查看日志"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonGetClipboard"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="获取剪贴板"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
     <!-- Main Content Area -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
