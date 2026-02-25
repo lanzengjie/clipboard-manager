@@ -23,4 +23,8 @@
     <string name="permissions_required">请授予必要权限以确保应用正常工作</string>
     <string name="permission_notification">通知权限</string>
     <string name="permission_clipboard">后台读取剪贴板权限</string>
+    <string name="accessibility_service_description">用于监听剪贴板变化，保存复制的内容到历史记录</string>
+    <string name="accessibility_permission_title">需要辅助功能权限</string>
+    <string name="accessibility_permission_message">为了监听剪贴板变化，需要您授权辅助功能权限。请在设置中开启\"剪贴板管理器\"的辅助功能服务。</string>
+    <string name="go_to_settings">去设置</string>
 </resources>

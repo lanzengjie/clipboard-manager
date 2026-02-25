@@ -21,7 +21,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.clipboard.manager.adapter.ClipboardAdapter
 import com.clipboard.manager.database.ClipboardEntry
 import com.clipboard.manager.databinding.ActivityMainBinding
-import com.clipboard.manager.service.ClipboardMonitorService
+import com.clipboard.manager.service.ClipboardAccessibilityService
 import com.clipboard.manager.ui.ClipboardViewModel
 
 class MainActivity : AppCompatActivity() {
@@ -67,6 +67,66 @@ class MainActivity : AppCompatActivity() {
 
         // 检查并请求必要权限
         checkAndRequestPermissions()
+
+        // 检查辅助功能权限
+        checkAccessibilityPermission()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 每次返回页面时检查辅助功能状态
+        updateMonitoringState()
+    }
+
+    private fun checkAccessibilityPermission() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val accessibilityShown = prefs.getBoolean("accessibility_dialog_shown", false)
+
+        if (!accessibilityShown && !isAccessibilityServiceEnabled()) {
+            showAccessibilityPermissionDialog()
+        }
+        prefs.edit().putBoolean("accessibility_dialog_shown", true).apply()
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val enabledServices = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        )
+        if (enabledServices != null) {
+            return enabledServices.contains(packageName)
+        }
+        return false
+    }
+
+    private fun showAccessibilityPermissionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.accessibility_permission_title)
+            .setMessage(R.string.accessibility_permission_message)
+            .setPositiveButton(R.string.go_to_settings) { _, _ ->
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                startActivity(intent)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun updateMonitoringState() {
+        // 检查辅助功能是否启用
+        val accessibilityEnabled = ClipboardAccessibilityService.isEnabled
+
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val savedMonitoring = prefs.getBoolean(KEY_MONITORING, false)
+
+        // 如果之前是开启状态但辅助功能未启用，则关闭
+        if (savedMonitoring && !accessibilityEnabled) {
+            isMonitoring = false
+            saveMonitoringState()
+            updateMonitoringUI()
+        } else {
+            isMonitoring = savedMonitoring
+            updateMonitoringUI()
+        }
     }
 
     private fun checkAndRequestPermissions() {
@@ -104,10 +164,6 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         isMonitoring = prefs.getBoolean(KEY_MONITORING, false)
         updateMonitoringUI()
-
-        if (isMonitoring) {
-            startMonitoringService()
-        }
     }
 
     private fun saveMonitoringState() {
@@ -143,32 +199,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleMonitoring() {
+        // 检查辅助功能是否启用
+        if (!ClipboardAccessibilityService.isEnabled) {
+            showAccessibilityPermissionDialog()
+            return
+        }
+
         isMonitoring = !isMonitoring
 
         if (isMonitoring) {
-            startMonitoringService()
             Toast.makeText(this, getString(R.string.monitoring_active), Toast.LENGTH_SHORT).show()
         } else {
-            stopMonitoringService()
             Toast.makeText(this, getString(R.string.monitoring_inactive), Toast.LENGTH_SHORT).show()
         }
 
         saveMonitoringState()
         updateMonitoringUI()
-    }
-
-    private fun startMonitoringService() {
-        val intent = Intent(this, ClipboardMonitorService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ContextCompat.startForegroundService(this, intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    private fun stopMonitoringService() {
-        val intent = Intent(this, ClipboardMonitorService::class.java)
-        stopService(intent)
     }
 
     private fun updateMonitoringUI() {
@@ -196,7 +242,7 @@ class MainActivity : AppCompatActivity() {
     private fun copyToClipboard(entry: ClipboardEntry) {
         // 如果正在监听，先设置标志位防止触发循环
         if (isMonitoring) {
-            ClipboardMonitorService.isSelfCopy = true
+            ClipboardAccessibilityService.isSelfCopy = true
         }
 
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
