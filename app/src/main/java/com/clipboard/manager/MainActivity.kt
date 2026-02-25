@@ -12,6 +12,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.clipboard.manager.adapter.ClipboardAdapter
@@ -55,6 +56,10 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         isMonitoring = prefs.getBoolean(KEY_MONITORING, false)
         updateMonitoringUI()
+
+        if (isMonitoring) {
+            startMonitoringService()
+        }
     }
 
     private fun saveMonitoringState() {
@@ -91,13 +96,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleMonitoring() {
         isMonitoring = !isMonitoring
-        val intent = Intent(this, ClipboardMonitorService::class.java)
 
         if (isMonitoring) {
-            startService(intent)
+            startMonitoringService()
             Toast.makeText(this, getString(R.string.monitoring_active), Toast.LENGTH_SHORT).show()
         } else {
-            stopService(intent)
+            stopMonitoringService()
             Toast.makeText(this, getString(R.string.monitoring_inactive), Toast.LENGTH_SHORT).show()
         }
 
@@ -105,14 +109,41 @@ class MainActivity : AppCompatActivity() {
         updateMonitoringUI()
     }
 
+    private fun startMonitoringService() {
+        val intent = Intent(this, ClipboardMonitorService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(this, intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    private fun stopMonitoringService() {
+        val intent = Intent(this, ClipboardMonitorService::class.java)
+        stopService(intent)
+    }
+
     private fun updateMonitoringUI() {
         if (isMonitoring) {
             binding.buttonToggleMonitoring.text = getString(R.string.stop_monitoring)
             binding.statusText.text = getString(R.string.monitoring_active)
+            binding.statusIndicator.setBackgroundResource(R.drawable.status_indicator_active)
         } else {
             binding.buttonToggleMonitoring.text = getString(R.string.start_monitoring)
             binding.statusText.text = getString(R.string.monitoring_inactive)
+            binding.statusIndicator.setBackgroundResource(R.drawable.status_indicator_inactive)
         }
+    }
+
+    private fun updateEmptyState(isEmpty: Boolean) {
+        if (isEmpty) {
+            binding.emptyStateLayout.visibility = android.view.View.VISIBLE
+            binding.recyclerView.visibility = android.view.View.GONE
+        } else {
+            binding.emptyStateLayout.visibility = android.view.View.GONE
+            binding.recyclerView.visibility = android.view.View.VISIBLE
+        }
+    }
     }
 
     private fun copyToClipboard(entry: ClipboardEntry) {

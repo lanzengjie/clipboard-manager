@@ -55,7 +55,7 @@ class ClipboardAdapter(
                 if (timestamp <= 0) {
                     ""
                 } else {
-                    val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    val sdf = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
                     sdf.format(Date(timestamp))
                 }
             } catch (e: Exception) {

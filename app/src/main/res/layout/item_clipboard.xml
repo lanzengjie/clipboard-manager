@@ -1,38 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.cardview.widget.CardView
+<com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="4dp">
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="6dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?android:attr/selectableItemBackground"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:strokeColor="#E0E0E0"
+    app:strokeWidth="1dp">
 
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
         android:padding="16dp">
 
         <TextView
             android:id="@+id/contentText"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
-            android:textColor="@android:color/black"
-            android:maxLines="3"
+            android:textSize="15sp"
+            android:textColor="@color/on_surface"
+            android:lineSpacingExtra="4dp"
+            android:maxLines="4"
             android:ellipsize="end"
-            android:text="Sample clipboard content" />
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:text="This is a sample of copied clipboard text that might span multiple lines to show how the card handles larger amounts of content." />
 
         <TextView
             android:id="@+id/timestampText"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="12dp"
             android:textSize="12sp"
-            android:textColor="@android:color/darker_gray"
-            android:text="2024-01-01 12:00:00" />
+            android:textColor="@color/on_surface_variant"
+            android:fontFamily="sans-serif"
+            app:layout_constraintTop_toBottomOf="@id/contentText"
+            app:layout_constraintStart_toStartOf="parent"
+            tools:text="Feb 24, 4:25 PM" />
 
-    </LinearLayout>
+        <ImageView
+            android:id="@+id/copyIcon"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:src="@drawable/ic_copy_hint"
+            android:alpha="0.4"
+            app:layout_constraintBottom_toBottomOf="@id/timestampText"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:tint="@color/primary"
+            tools:ignore="ContentDescription" />
 
-</androidx.cardview.widget.CardView>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</com.google.android.material.card.MaterialCardView>

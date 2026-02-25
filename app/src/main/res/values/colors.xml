@@ -1,11 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Primary Colors -->
+    <color name="primary">#2D3250</color>
+    <color name="primary_variant">#424769</color>
+    <color name="on_primary">#FFFFFF</color>
+
+    <!-- Secondary Colors -->
+    <color name="secondary">#7077A1</color>
+    <color name="secondary_variant">#F6B17A</color>
+    <color name="on_secondary">#2D3250</color>
+
+    <!-- Background and Surfaces -->
+    <color name="background">#F8F9FA</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_background">#1A1B1F</color>
+    <color name="on_surface">#1A1B1F</color>
+    <color name="on_surface_variant">#44474F</color>
+
+    <!-- Functional Colors -->
+    <color name="error">#BA1A1A</color>
+    <color name="success">#2E7D32</color>
+    <color name="active_green">#4CAF50</color>
+    <color name="inactive_gray">#9E9E9E</color>
+
+    <!-- Legacy / Compatibility -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
     <color name="teal_200">#FF03DAC5</color>
     <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-    <color name="ic_launcher_background">#6200EE</color>
+    <color name="ic_launcher_background">#2D3250</color>
 </resources>
