@@ -1,15 +1,18 @@
 package com.clipboard.manager
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -32,6 +35,17 @@ class MainActivity : AppCompatActivity() {
         private const val PREFS_NAME = "ClipboardManagerPrefs"
         private const val KEY_MONITORING = "is_monitoring"
         private const val KEY_BATTERY_DIALOG_SHOWN = "battery_dialog_shown"
+        private const val KEY_PERMISSIONS_SHOWN = "permissions_dialog_shown"
+    }
+
+    // 权限请求 launcher
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.all { it.value }
+        if (!allGranted) {
+            Toast.makeText(this, getString(R.string.permissions_required), Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,6 +64,40 @@ class MainActivity : AppCompatActivity() {
 
         // 检查电池优化
         checkBatteryOptimization()
+
+        // 检查并请求必要权限
+        checkAndRequestPermissions()
+    }
+
+    private fun checkAndRequestPermissions() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_PERMISSIONS_SHOWN, false)) {
+            return
+        }
+
+        val permissionsToRequest = mutableListOf<String>()
+
+        // 通知权限 (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // 剪贴板后台读取权限 (Android 14+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (ContextCompat.checkSelfPermission(this, "android.permission.READ_CLIPBOARD_IN_BACKGROUND")
+                != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add("android.permission.READ_CLIPBOARD_IN_BACKGROUND")
+            }
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            permissionLauncher.launch(permissionsToRequest.toTypedArray())
+        }
+
+        prefs.edit().putBoolean(KEY_PERMISSIONS_SHOWN, true).apply()
     }
 
     private fun restoreMonitoringState() {

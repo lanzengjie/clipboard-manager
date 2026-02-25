@@ -20,4 +20,7 @@
     <string name="battery_optimization_title">电池优化</string>
     <string name="battery_optimization_message">建议关闭电池优化以确保后台服务正常运行</string>
     <string name="ok">确定</string>
+    <string name="permissions_required">请授予必要权限以确保应用正常工作</string>
+    <string name="permission_notification">通知权限</string>
+    <string name="permission_clipboard">后台读取剪贴板权限</string>
 </resources>
