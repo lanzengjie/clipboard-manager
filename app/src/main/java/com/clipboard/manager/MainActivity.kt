@@ -144,7 +144,6 @@ class MainActivity : AppCompatActivity() {
             binding.recyclerView.visibility = android.view.View.VISIBLE
         }
     }
-    }
 
     private fun copyToClipboard(entry: ClipboardEntry) {
         // 如果正在监听，先设置标志位防止触发循环
@@ -182,16 +181,6 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun updateEmptyState(isEmpty: Boolean) {
-        if (isEmpty) {
-            binding.emptyText.visibility = android.view.View.VISIBLE
-            binding.recyclerView.visibility = android.view.View.GONE
-        } else {
-            binding.emptyText.visibility = android.view.View.GONE
-            binding.recyclerView.visibility = android.view.View.VISIBLE
-        }
-    }
-
     private fun checkBatteryOptimization() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val dialogShown = prefs.getBoolean(KEY_BATTERY_DIALOG_SHOWN, false)
@@ -224,3 +213,4 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+}
