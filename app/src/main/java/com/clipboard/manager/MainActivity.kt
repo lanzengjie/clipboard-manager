@@ -4,7 +4,11 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -26,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREFS_NAME = "ClipboardManagerPrefs"
         private const val KEY_MONITORING = "is_monitoring"
+        private const val KEY_BATTERY_DIALOG_SHOWN = "battery_dialog_shown"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,6 +46,9 @@ class MainActivity : AppCompatActivity() {
         setupRecyclerView()
         setupButtons()
         observeData()
+
+        // 检查电池优化
+        checkBatteryOptimization()
     }
 
     private fun restoreMonitoringState() {
@@ -59,7 +67,7 @@ class MainActivity : AppCompatActivity() {
             onItemClick = { entry -> copyToClipboard(entry) },
             onItemLongClick = { entry -> showDeleteDialog(entry) }
         )
-        
+
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
     }
@@ -84,7 +92,7 @@ class MainActivity : AppCompatActivity() {
     private fun toggleMonitoring() {
         isMonitoring = !isMonitoring
         val intent = Intent(this, ClipboardMonitorService::class.java)
-        
+
         if (isMonitoring) {
             startService(intent)
             Toast.makeText(this, getString(R.string.monitoring_active), Toast.LENGTH_SHORT).show()
@@ -92,7 +100,7 @@ class MainActivity : AppCompatActivity() {
             stopService(intent)
             Toast.makeText(this, getString(R.string.monitoring_inactive), Toast.LENGTH_SHORT).show()
         }
-        
+
         saveMonitoringState()
         updateMonitoringUI()
     }
@@ -108,6 +116,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun copyToClipboard(entry: ClipboardEntry) {
+        // 如果正在监听，先设置标志位防止触发循环
+        if (isMonitoring) {
+            ClipboardMonitorService.isSelfCopy = true
+        }
+
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("clipboard", entry.content)
         clipboard.setPrimaryClip(clip)
@@ -145,6 +158,39 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.emptyText.visibility = android.view.View.GONE
             binding.recyclerView.visibility = android.view.View.VISIBLE
+        }
+    }
+
+    private fun checkBatteryOptimization() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val dialogShown = prefs.getBoolean(KEY_BATTERY_DIALOG_SHOWN, false)
+
+        if (!dialogShown) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.battery_optimization_title))
+                    .setMessage(getString(R.string.battery_optimization_message))
+                    .setPositiveButton(getString(R.string.ok)) { _, _ ->
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            // 某些设备可能不支持，跳转到设置页面
+                            try {
+                                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                            } catch (e2: Exception) {
+                                // 忽略
+                            }
+                        }
+                    }
+                    .setNegativeButton(getString(R.string.cancel), null)
+                    .show()
+
+                prefs.edit().putBoolean(KEY_BATTERY_DIALOG_SHOWN, true).apply()
+            }
         }
     }
 }

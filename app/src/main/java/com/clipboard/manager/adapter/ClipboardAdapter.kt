@@ -51,8 +51,16 @@ class ClipboardAdapter(
         }
 
         private fun formatTimestamp(timestamp: Long): String {
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-            return sdf.format(Date(timestamp))
+            return try {
+                if (timestamp <= 0) {
+                    ""
+                } else {
+                    val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    sdf.format(Date(timestamp))
+                }
+            } catch (e: Exception) {
+                ""
+            }
         }
     }
 

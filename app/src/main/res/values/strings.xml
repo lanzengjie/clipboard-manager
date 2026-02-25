@@ -15,4 +15,9 @@
     <string name="cancel">取消</string>
     <string name="deleted">已删除</string>
     <string name="history_cleared">已清空历史</string>
+    <string name="notification_channel_name">剪贴板监听</string>
+    <string name="notification_channel_description">显示剪贴板监听服务正在运行</string>
+    <string name="battery_optimization_title">电池优化</string>
+    <string name="battery_optimization_message">建议关闭电池优化以确保后台服务正常运行</string>
+    <string name="ok">确定</string>
 </resources>
