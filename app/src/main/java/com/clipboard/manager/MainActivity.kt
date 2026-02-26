@@ -1,189 +1,126 @@
 package com.clipboard.manager
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.View
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.clipboard.manager.adapter.ClipboardAdapter
 import com.clipboard.manager.database.ClipboardEntry
 import com.clipboard.manager.databinding.ActivityMainBinding
-import com.clipboard.manager.service.ClipboardAccessibilityService
 import com.clipboard.manager.ui.ClipboardViewModel
-import com.clipboard.manager.util.DebugLog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: ClipboardViewModel
     private lateinit var adapter: ClipboardAdapter
-    private var isMonitoring = false
+    private var isSearching = false
 
-    companion object {
-        private const val PREFS_NAME = "ClipboardManagerPrefs"
-        private const val KEY_MONITORING = "is_monitoring"
-        private const val KEY_BATTERY_DIALOG_SHOWN = "battery_dialog_shown"
-        private const val KEY_PERMISSIONS_SHOWN = "permissions_dialog_shown"
-    }
-
-    // 权限请求 launcher
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.all { it.value }
-        if (!allGranted) {
-            Toast.makeText(this, getString(R.string.permissions_required), Toast.LENGTH_LONG).show()
-        }
-    }
+    private lateinit var clipboardManager: ClipboardManager
+    private var lastClipboardContent: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 初始化调试日志
-        DebugLog.init(this)
-        DebugLog.log("=== MainActivity onCreate ===")
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         viewModel = ViewModelProvider(this)[ClipboardViewModel::class.java]
 
-        DebugLog.log("ViewModel initialized")
-        DebugLog.log("ClipboardAccessibilityService.isEnabled: ${ClipboardAccessibilityService.isEnabled}")
-
-        // Restore monitoring state
-        restoreMonitoringState()
-
         setupRecyclerView()
         setupButtons()
+        setupSearch()
         observeData()
 
-        // 检查电池优化
-        checkBatteryOptimization()
+        // 初始化剪贴板监听
+        setupClipboardListener()
 
-        // 检查并请求必要权限
-        checkAndRequestPermissions()
+        // 读取当前剪贴板内容并保存
+        readCurrentClipboard()
+    }
 
-        // 检查辅助功能权限
-        checkAccessibilityPermission()
+    private fun setupClipboardListener() {
+        clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+        // 保存当前剪贴板内容
+        lastClipboardContent = getCurrentClipboardText()
+
+        // 添加剪贴板变化监听
+        clipboardManager.addPrimaryClipChangedListener {
+            val currentText = getCurrentClipboardText()
+            if (currentText.isNotEmpty() && currentText != lastClipboardContent) {
+                lastClipboardContent = currentText
+                // 自动保存新内容
+                viewModel.insert(ClipboardEntry(content = currentText))
+            }
+        }
+    }
+
+    private fun getCurrentClipboardText(): String {
+        return try {
+            val clip = clipboardManager.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                clip.getItemAt(0).text?.toString() ?: ""
+            } else {
+                ""
+            }
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // 每次返回页面时检查辅助功能状态
-        updateMonitoringState()
-    }
-
-    private fun checkAccessibilityPermission() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val accessibilityShown = prefs.getBoolean("accessibility_dialog_shown", false)
-
-        if (!accessibilityShown && !isAccessibilityServiceEnabled()) {
-            showAccessibilityPermissionDialog()
+        // 检查剪贴板是否有变化
+        val currentText = getCurrentClipboardText()
+        if (currentText.isNotEmpty() && currentText != lastClipboardContent) {
+            lastClipboardContent = currentText
+            viewModel.insert(ClipboardEntry(content = currentText))
         }
-        prefs.edit().putBoolean("accessibility_dialog_shown", true).apply()
     }
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val enabledServices = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        )
-        if (enabledServices != null) {
-            return enabledServices.contains(packageName)
-        }
-        return false
-    }
+    private fun readCurrentClipboard() {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = clipboard.primaryClip
 
-    private fun showAccessibilityPermissionDialog() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.accessibility_permission_title)
-            .setMessage(R.string.accessibility_permission_message)
-            .setPositiveButton(R.string.go_to_settings) { _, _ ->
-                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                startActivity(intent)
+            if (clip != null && clip.itemCount > 0) {
+                val text = clip.getItemAt(0).text?.toString()
+                if (!text.isNullOrEmpty()) {
+                    lastClipboardContent = text
+                    // 保存到数据库
+                    viewModel.insert(ClipboardEntry(content = text))
+                }
             }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun updateMonitoringState() {
-        // 检查辅助功能是否启用
-        val accessibilityEnabled = ClipboardAccessibilityService.isEnabled
-
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val savedMonitoring = prefs.getBoolean(KEY_MONITORING, false)
-
-        // 如果之前是开启状态但辅助功能未启用，则关闭
-        if (savedMonitoring && !accessibilityEnabled) {
-            isMonitoring = false
-            saveMonitoringState()
-            updateMonitoringUI()
-        } else {
-            isMonitoring = savedMonitoring
-            updateMonitoringUI()
+        } catch (e: Exception) {
+            // 静默处理异常
         }
-    }
-
-    private fun checkAndRequestPermissions() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_PERMISSIONS_SHOWN, false)) {
-            return
-        }
-
-        val permissionsToRequest = mutableListOf<String>()
-
-        // 通知权限 (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-
-        // 剪贴板后台读取权限 (Android 14+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            if (ContextCompat.checkSelfPermission(this, "android.permission.READ_CLIPBOARD_IN_BACKGROUND")
-                != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add("android.permission.READ_CLIPBOARD_IN_BACKGROUND")
-            }
-        }
-
-        if (permissionsToRequest.isNotEmpty()) {
-            permissionLauncher.launch(permissionsToRequest.toTypedArray())
-        }
-
-        prefs.edit().putBoolean(KEY_PERMISSIONS_SHOWN, true).apply()
-    }
-
-    private fun restoreMonitoringState() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        isMonitoring = prefs.getBoolean(KEY_MONITORING, false)
-        updateMonitoringUI()
-    }
-
-    private fun saveMonitoringState() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_MONITORING, isMonitoring).apply()
     }
 
     private fun setupRecyclerView() {
         adapter = ClipboardAdapter(
-            onItemClick = { entry -> copyToClipboard(entry) },
-            onItemLongClick = { entry -> showDeleteDialog(entry) }
+            onCopyClick = { entry -> copyToClipboard(entry) },
+            onFavoriteClick = { entry -> toggleFavorite(entry) },
+            onNoteClick = { entry -> showNoteDialog(entry) },
+            onDeleteClick = { entry -> showDeleteDialog(entry) },
+            onItemClick = { entry -> showDetailDialog(entry) }
         )
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
@@ -191,176 +128,231 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupButtons() {
-        binding.buttonToggleMonitoring.setOnClickListener {
-            toggleMonitoring()
-        }
-
         binding.buttonClearHistory.setOnClickListener {
             showClearHistoryDialog()
         }
 
-        // 调试按钮
-        binding.buttonRefreshDebug.setOnClickListener {
-            refreshDebugInfo()
-        }
-
-        binding.buttonViewLog.setOnClickListener {
-            showLogDialog()
-        }
-
+        // 手动刷新按钮
         binding.buttonGetClipboard.setOnClickListener {
-            getCurrentClipboard()
+            readCurrentClipboard()
+            Toast.makeText(this, "已刷新剪贴板", Toast.LENGTH_SHORT).show()
+        }
+
+        // 导出按钮
+        binding.buttonExport.setOnClickListener {
+            showExportDialog()
         }
     }
 
-    private fun refreshDebugInfo() {
-        DebugLog.log("=== refreshDebugInfo called ===")
+    private fun showExportDialog() {
+        val options = arrayOf(
+            getString(R.string.export_as_text),
+            getString(R.string.export_as_json)
+        )
 
-        val accessibilityEnabled = ClipboardAccessibilityService.isEnabled
-        val serviceInstance = ClipboardAccessibilityService.getInstance()
-
-        val info = buildString {
-            appendLine("=== 调试状态 ===")
-            appendLine("辅助功能服务: ${if (accessibilityEnabled) "已启用 ✅" else "未启用 ❌"}")
-            appendLine("服务实例: ${if (serviceInstance != null) "存在 ✅" else "不存在 ❌"}")
-            appendLine("监听状态: ${if (isMonitoring) "开启中" else "已停止"}")
-            appendLine("Android版本: ${android.os.Build.VERSION.RELEASE}")
-            appendLine("设备: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-            appendLine()
-            appendLine("=== 检查步骤 ===")
-            appendLine("1. 请确认已在系统设置中开启辅助功能权限")
-            appendLine("2. 点击'开始监听'按钮")
-            appendLine("3. 在其他应用复制文本测试")
-        }
-
-        binding.debugInfoText.text = info
-    }
-
-    private fun showLogDialog() {
-        val logContent = DebugLog.getLogContent()
-
-        // 只显示最后 2000 字符
-        val displayContent = if (logContent.length > 2000) {
-            "...(截取最后2000字符)\n" + logContent.takeLast(2000)
-        } else {
-            logContent
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("调试日志")
-            .setMessage(displayContent)
-            .setPositiveButton("刷新", { _, _ -> refreshDebugInfo() })
-            .setNegativeButton("关闭", null)
-            .setNeutralButton("清空日志", { _, _ ->
-                DebugLog.clearLog()
-                Toast.makeText(this, "日志已清空", Toast.LENGTH_SHORT).show()
-            })
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.select_export_format))
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> exportAsText()
+                    1 -> exportAsJson()
+                }
+            }
             .show()
     }
 
-    private fun getCurrentClipboard() {
-        DebugLog.log("=== getCurrentClipboard called ===")
-
-        try {
-            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = clipboard.primaryClip
-
-            val info = buildString {
-                appendLine("=== 当前剪贴板 ===")
-                appendLine("ClipboardManager: $clipboard")
-                appendLine("PrimaryClip: ${clip != null}")
-
-                if (clip != null) {
-                    appendLine("ItemCount: ${clip.itemCount}")
-
-                    if (clip.itemCount > 0) {
-                        val text = clip.getItemAt(0).text?.toString()
-                        appendLine("文本内容: '${text?.take(100)}'")
-                        appendLine("文本长度: ${text?.length}")
-
-                        if (text != null && text.length > 100) {
-                            appendLine()
-                            appendLine("=== 完整内容 (前500字) ===")
-                            appendLine(text.take(500))
-                        }
-                    }
-                }
+    private fun exportAsText() {
+        viewModel.allEntries.value?.let { entries ->
+            if (entries.isEmpty()) {
+                Toast.makeText(this, getString(R.string.no_data_to_export), Toast.LENGTH_SHORT).show()
+                return
             }
 
-            binding.debugInfoText.text = info
-            DebugLog.log("Current clipboard: ${info.take(200)}")
+            try {
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                val content = buildString {
+                    appendLine("剪贴板历史导出")
+                    appendLine("导出时间: ${sdf.format(Date())}")
+                    appendLine("=" .repeat(50))
+                    appendLine()
 
-            Toast.makeText(this, "已获取当前剪贴板内容", Toast.LENGTH_SHORT).show()
+                    entries.forEachIndexed { index, entry ->
+                        appendLine("${index + 1}. ${if (entry.isFavorite) "★ " else ""}")
+                        appendLine("内容: ${entry.content}")
+                        if (entry.note.isNotEmpty()) {
+                            appendLine("备注: ${entry.note}")
+                        }
+                        appendLine("时间: ${sdf.format(Date(entry.timestamp))}")
+                        appendLine("-".repeat(30))
+                        appendLine()
+                    }
+                }
 
-        } catch (e: Exception) {
-            val errorMsg = "获取剪贴板失败: ${e.message}"
-            binding.debugInfoText.text = errorMsg
-            DebugLog.logError("getCurrentClipboard failed", e)
+                shareFile(content, "clipboard_export.txt", "text/plain")
+                Toast.makeText(this, getString(R.string.export_success), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, getString(R.string.export_failed), Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
+    private fun exportAsJson() {
+        viewModel.allEntries.value?.let { entries ->
+            if (entries.isEmpty()) {
+                Toast.makeText(this, getString(R.string.no_data_to_export), Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            try {
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                val jsonArray = JSONArray()
+
+                entries.forEach { entry ->
+                    val jsonObject = JSONObject().apply {
+                        put("content", entry.content)
+                        put("note", entry.note)
+                        put("favorite", entry.isFavorite)
+                        put("timestamp", entry.timestamp)
+                        put("datetime", sdf.format(Date(entry.timestamp)))
+                    }
+                    jsonArray.put(jsonObject)
+                }
+
+                val jsonContent = JSONObject().apply {
+                    put("export_time", sdf.format(Date()))
+                    put("total_count", entries.size)
+                    put("entries", jsonArray)
+                }.toString(2)
+
+                shareFile(jsonContent, "clipboard_export.json", "application/json")
+                Toast.makeText(this, getString(R.string.export_success), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, getString(R.string.export_failed), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun shareFile(content: String, fileName: String, mimeType: String) {
+        try {
+            val file = File(getExternalFilesDir(null), fileName)
+            file.writeText(content)
+
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            startActivity(Intent.createChooser(shareIntent, getString(R.string.export_data)))
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.export_failed), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupSearch() {
+        binding.searchEditText.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString() ?: ""
+                viewModel.search(query)
+                isSearching = query.isNotEmpty()
+            }
+
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+
     private fun observeData() {
-        viewModel.allEntries.observe(this) { entries ->
+        viewModel.searchResults.observe(this) { entries ->
             adapter.submitList(entries)
             updateEmptyState(entries.isEmpty())
         }
     }
 
-    private fun toggleMonitoring() {
-        // 检查辅助功能是否启用
-        if (!ClipboardAccessibilityService.isEnabled) {
-            showAccessibilityPermissionDialog()
-            return
-        }
-
-        isMonitoring = !isMonitoring
-
-        if (isMonitoring) {
-            Toast.makeText(this, getString(R.string.monitoring_active), Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, getString(R.string.monitoring_inactive), Toast.LENGTH_SHORT).show()
-        }
-
-        saveMonitoringState()
-        updateMonitoringUI()
-    }
-
-    private fun updateMonitoringUI() {
-        if (isMonitoring) {
-            binding.buttonToggleMonitoring.text = getString(R.string.stop_monitoring)
-            binding.statusText.text = getString(R.string.monitoring_active)
-            binding.statusIndicator.setBackgroundResource(R.drawable.status_indicator_active)
-        } else {
-            binding.buttonToggleMonitoring.text = getString(R.string.start_monitoring)
-            binding.statusText.text = getString(R.string.monitoring_inactive)
-            binding.statusIndicator.setBackgroundResource(R.drawable.status_indicator_inactive)
-        }
-    }
-
     private fun updateEmptyState(isEmpty: Boolean) {
         if (isEmpty) {
-            binding.emptyStateLayout.visibility = android.view.View.VISIBLE
-            binding.recyclerView.visibility = android.view.View.GONE
+            binding.emptyStateLayout.visibility = View.VISIBLE
+            binding.recyclerView.visibility = View.GONE
+            binding.emptyText.text = if (isSearching) {
+                getString(R.string.no_search_results)
+            } else {
+                getString(R.string.no_clipboard_data)
+            }
         } else {
-            binding.emptyStateLayout.visibility = android.view.View.GONE
-            binding.recyclerView.visibility = android.view.View.VISIBLE
+            binding.emptyStateLayout.visibility = View.GONE
+            binding.recyclerView.visibility = View.VISIBLE
         }
     }
 
     private fun copyToClipboard(entry: ClipboardEntry) {
-        // 如果正在监听，先设置标志位防止触发循环
-        if (isMonitoring) {
-            ClipboardAccessibilityService.isSelfCopy = true
-        }
-
-        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("clipboard", entry.content)
         clipboard.setPrimaryClip(clip)
+        lastClipboardContent = entry.content
         Toast.makeText(this, getString(R.string.copy_to_clipboard), Toast.LENGTH_SHORT).show()
     }
 
+    private fun toggleFavorite(entry: ClipboardEntry) {
+        viewModel.updateFavorite(entry)
+        if (entry.isFavorite) {
+            Toast.makeText(this, getString(R.string.removed_from_favorite), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, getString(R.string.added_to_favorite), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showNoteDialog(entry: ClipboardEntry) {
+        val editText = android.widget.EditText(this).apply {
+            setText(entry.note)
+            hint = getString(R.string.note_hint)
+            setPadding(48, 32, 48, 32)
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(if (entry.note.isEmpty()) getString(R.string.add_note) else getString(R.string.edit_note))
+            .setView(editText)
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                val note = editText.text.toString()
+                viewModel.updateNote(entry, note)
+                Toast.makeText(this, getString(R.string.note_saved), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun showDetailDialog(entry: ClipboardEntry) {
+        val scrollView = ScrollView(this).apply {
+            setPadding(32, 16, 32, 16)
+        }
+
+        val textView = TextView(this).apply {
+            text = entry.content
+            textSize = 15f
+            setTextColor(getColor(R.color.on_surface))
+        }
+        scrollView.addView(textView)
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.detail))
+            .setView(scrollView)
+            .setPositiveButton(getString(R.string.copy)) { _, _ ->
+                copyToClipboard(entry)
+            }
+            .setNeutralButton(getString(R.string.close), null)
+            .create()
+
+        dialog.show()
+    }
+
     private fun showDeleteDialog(entry: ClipboardEntry) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.delete))
             .setMessage(getString(R.string.confirm_delete))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
@@ -372,7 +364,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showClearHistoryDialog() {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.clear_history))
             .setMessage(getString(R.string.confirm_clear))
             .setPositiveButton(getString(R.string.clear_history)) { _, _ ->
@@ -383,36 +375,9 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun checkBatteryOptimization() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val dialogShown = prefs.getBoolean(KEY_BATTERY_DIALOG_SHOWN, false)
-
-        if (!dialogShown) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                AlertDialog.Builder(this)
-                    .setTitle(getString(R.string.battery_optimization_title))
-                    .setMessage(getString(R.string.battery_optimization_message))
-                    .setPositiveButton(getString(R.string.ok)) { _, _ ->
-                        try {
-                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                data = Uri.parse("package:$packageName")
-                            }
-                            startActivity(intent)
-                        } catch (e: Exception) {
-                            // 某些设备可能不支持，跳转到设置页面
-                            try {
-                                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                            } catch (e2: Exception) {
-                                // 忽略
-                            }
-                        }
-                    }
-                    .setNegativeButton(getString(R.string.cancel), null)
-                    .show()
-
-                prefs.edit().putBoolean(KEY_BATTERY_DIALOG_SHOWN, true).apply()
-            }
-        }
+    override fun onDestroy() {
+        super.onDestroy()
+        // 移除剪贴板监听
+        clipboardManager.removePrimaryClipChangedListener {}
     }
 }

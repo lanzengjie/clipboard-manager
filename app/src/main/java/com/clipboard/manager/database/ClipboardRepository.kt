@@ -6,6 +6,10 @@ class ClipboardRepository(private val clipboardDao: ClipboardDao) {
 
     val allEntries: LiveData<List<ClipboardEntry>> = clipboardDao.getAllEntries()
 
+    fun searchEntries(query: String): LiveData<List<ClipboardEntry>> {
+        return clipboardDao.searchEntries(query)
+    }
+
     suspend fun insert(entry: ClipboardEntry) {
         // Check if content already exists
         val existing = clipboardDao.findByContent(entry.content)
@@ -16,6 +20,14 @@ class ClipboardRepository(private val clipboardDao: ClipboardDao) {
             // 已存在则更新时间戳，将最新内容移到顶部
             clipboardDao.updateTimestamp(entry.content, System.currentTimeMillis())
         }
+    }
+
+    suspend fun updateFavorite(id: Long, isFavorite: Boolean) {
+        clipboardDao.updateFavorite(id, isFavorite)
+    }
+
+    suspend fun updateNote(id: Long, note: String) {
+        clipboardDao.updateNote(id, note)
     }
 
     suspend fun delete(entry: ClipboardEntry) {
